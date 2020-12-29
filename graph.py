@@ -51,8 +51,6 @@ class Graph(object):
         n = self.node_count()
         return n * (n - 1) / 2
 
-        return total
-
     def density(self):
         """ Returns the density of G according to https://en.wikipedia.org/wiki/Dense_graph """
         ratio = self.edge_count() / self.max_possible_edges()
@@ -61,6 +59,10 @@ class Graph(object):
             return 2 * ratio
 
         return ratio
+
+    def reachable_pages(self, node, dist):
+        """ Returns the set of pages at distance at most dist from node """
+        pass
 
     def plot_degree_distribution(self):
         neighbour_size_list = self.neighbour_sizes()
