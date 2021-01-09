@@ -257,21 +257,40 @@ class Graph(object):
 
     # ---------------- RQ 4 ---------------- #
 
+    def modified_dfs(self, node, target, path, visited_edges):
+        """
+
+        :param node:
+        :param target:
+        :param path:
+        :param visited_edges:
+        :return:
+        """
+        next_nodes = self.neighbours(node)
+        if target in next_nodes:
+            path.append(node)
+            visited_edges[(node, target)] = True
+            return True, path, visited_edges
+        else:
+            for u in next_nodes:
+                if u in path or visited_edges[(node, u)]:
+                    continue
+                else:
+                    flag, path, visited_edges = self.modified_dfs(u, target, path, visited_edges)
+                    if flag:
+                        return True, path, visited_edges
+        return False, path, visited_edges
+
     def mincut_between_nodes(self, source, target):
         """ Returns the set of nodes at distance at most dist from root """
-        visited = defaultdict(bool)  # boolean vector of visits
-        frontier = [source]
+        visited_edges = defaultdict(bool)  # boolean vector of visits
+        path = [source]
         count = 0
 
-        for u in frontier:
-            node_list = self.neighbours(u)
-            if target in node_list:
+        for node in self.neighbours(source):
+            flag, path, visited_edges = self.modified_dfs(node, target, path, visited_edges)
+            if flag:
                 count += 1
-                continue
-            for v in node_list:
-                if not visited[v]:
-                    visited[v] = True
-                    frontier.append(v)
 
         return count
 
