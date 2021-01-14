@@ -578,4 +578,3 @@ class Graph(object):
         categories = self.categories_list()
         sorted_categories = sorted(zip(categories, pr), key=lambda x: x[1], reverse=True)
         return [x[0] for x in sorted_categories]
-
