@@ -35,9 +35,3 @@ def categories_preprocess():
         for category, pages in single_category_dict.items():
             line = "{}: {}\n".format(category, " ".join(list(map(str, pages))))
             f.write(line)
-
-
-def load_categories():
-    """ Returns a dictionary {Category: [page1, page2, ...]}
-    reading the content of reduced_categories.txt """
-    pass

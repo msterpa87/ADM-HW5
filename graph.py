@@ -279,7 +279,7 @@ class Graph(object):
 
         :param root: int
         :param dist: int
-        :return:
+        :return: list of ints
         """
         visited = defaultdict(bool)  # boolean vector of visits
         frontier = defaultdict(list)  # {i: list of nodes at dist i from root}
@@ -300,52 +300,73 @@ class Graph(object):
 
     # ---------------- RQ 3 ---------------- #
 
-    def category_distance(self, cat_id, targets_ids, max_dist=50):
+    def get_category_distance(self, cat_id, targets_ids, max_dist=50):
         """ Return the minimum distance from the central node in
-            category to all the nodes in node_list that are in category """
-        central_node = self.central_node(cat_id)
+            category to all the nodes in node_list that are in category
+
+        :param cat_id: int
+        :param targets_ids: list of ints
+        :param max_dist: int
+        :return: int
+        """
+        central_node = self.central_node(cat_id)  # starting node
         frontier = defaultdict(list)
         frontier[0].append(central_node)
         visited = defaultdict(bool)
         visited[central_node] = True
+        i = 0
 
-        for i in range(0, max_dist):
-            if len(frontier[i]) == 0:
-                break
+        while i <= max_dist and len(frontier[i]) and len(targets_ids):
+            # stop when reached maximum distance or no more nodes to explore
+            # or all target nodes have been found
             for node in frontier[i]:
+                # visit node in the frontier and append its neighbours to
+                # the next level of the search
                 for v in self.neighbours(node):
                     if not visited[v]:
                         visited[v] = True
                         frontier[i + 1].append(v)
-                try:
+                with suppress(ValueError):
+                    # try to remove visited nodes from the targets
                     targets_ids.remove(node)
-                except ValueError:
-                    pass
+            i += 1
 
-            if len(targets_ids) == 0:
-                break
+        return [i-1, -1][len(targets_ids) > 0]
 
-        if len(targets_ids) > 0:
-            return -1
-        else:
-            return i
+    # def reachable_targets(self, root, targets, dist):
+    #     reached = self.truncated_bfs(root, dist)
+    #     diff = set(targets).difference(set(reached))
+    #     return len(diff) == 0
 
-    def reachable_targets(self, root, targets, dist):
-        reached = self.truncated_bfs(root, dist)
-        diff = set(targets).difference(set(reached))
-        if len(diff) == 0:
-            return True
-        else:
-            return False
+    # This function is primarily for testing purposes
+    def random_targets(self, cat_id, size):
+        """ Returns a random set of nodes from cat_id
+
+        :param cat_id: int
+        :param size: int
+        :return: list of ints
+        """
+        nodes = self.get_nodes_from_category_id(cat_id)
+        ids = np.random.randint(0, len(nodes), size)
+        return list(np.array(nodes)[ids])
 
     # ---------------- RQ 4 ---------------- #
 
-    def induced_subgraph(self, cat_id_1, cat_id_2):
-        """
+    def get_small_categories(self, size=200):
+        """ Return True if cat_id has less than size nodes """
+        def is_small(cat_str):
+            cat_id = self.get_category_id(cat_str)
+            return len(self.get_nodes_from_category_id(cat_id)) < size
 
-        :param cat_id_1:
-        :param cat_id_2:
-        :return:
+        return list(filter(is_small, self.categories_list()))
+
+    def induced_subgraph(self, cat_id_1, cat_id_2):
+        """ Returns a new object of type Graph representing the induced sabgraph
+            of the nodes within the input categories
+
+        :param cat_id_1: int
+        :param cat_id_2: int
+        :return: Graph object
         """
         node_list_1 = self.get_nodes_from_category_id(cat_id_1)
         node_list_2 = self.get_nodes_from_category_id(cat_id_2)
@@ -359,18 +380,21 @@ class Graph(object):
             for v in intersection(nodes, self.in_edge_dict[u]):
                 edge_list.append([v, u])
 
-        graph = Graph()
-        graph.create_from_edgelist(edge_list)
-        return graph
+        subgraph = Graph()
+        subgraph.create_from_edgelist(edge_list)
+        return subgraph
 
     def modified_dfs(self, node, target, visited_edges):
-        """
+        """ Modified Depth First Search where each time target is reached
+            the recursion goes back to node and start exploring a new path
 
-        :param node:
-        :param target:
-        :param path:
-        :param visited_edges:
-        :return:
+        :param node: int
+        :param target: int
+        :param visited_edges: dict {(int, int): bool}
+        :return: bool, dict
+                 return True iff the target was reached
+                 return the dictionary of visited edges so that
+                 repeated call to this function can be made
         """
         if node == target:
             return True, visited_edges
@@ -390,14 +414,27 @@ class Graph(object):
         return False, visited_edges
 
     def mincut_between_nodes(self, source, target):
-        """ Returns the set of nodes at distance at most dist from root """
+        """ Returns the minimum number of edges necessary to disconnect
+            source from target
+
+        :param source: int
+        :param target: int
+        :return: int
+        """
         visited_edges = defaultdict(bool)  # boolean vector of visits
         count = 0
 
         for node in self.neighbours(source):
             if visited_edges[(source, node)]:
                 continue
-            flag, visited_edges = self.modified_dfs(node, target, visited_edges)
+            try:
+                # runs a modified DFS that stops when a target is reached going back
+                # to the root to explore a new path, essentially exploring disjoint
+                # paths to the target
+                flag, visited_edges = self.modified_dfs(node, target, visited_edges)
+            except RecursionError:
+                print("[Error] Mincut not computed due to recursion error.")
+                return -1
             if flag:
                 count += 1
 
@@ -406,20 +443,22 @@ class Graph(object):
     # ---------------- RQ 5 ---------------- #
 
     def distance_vector(self, root):
-        """ Returns the distance vector of each node from root """
+        """ Returns the distance vector of each node from root
+
+        :param root:
+        :return:
+        """
         visited = defaultdict(bool)  # boolean vector of visits
         frontier = defaultdict(list)
         frontier[1] = self.neighbours(root)
-        distances_by_cat = defaultdict(list)
         i = 1
         distances = dict()
 
-        while True:
-            if len(frontier[i]) == 0:  # no more nodes to visit
-                break
+        while len(frontier[i]):
+            # keep running while there are nodes to visit
             for u in frontier[i]:
-                distances[u] = i
-
+                distances[u] = i  # save node distance from the source
+                # append neighbours to nodes to be visited
                 for v in self.neighbours(u):
                     if not visited[v]:
                         visited[v] = True
@@ -429,7 +468,12 @@ class Graph(object):
         return distances
 
     def get_closest_categories(self, source_cat_id):
-        """ Returns the list of categories sorted by their distance from cat_id """
+        """ Returns the list of categories sorted by their distance
+            from cat_id from closest to furthest
+
+        :param source_cat_id: int
+        :return: list of strings
+        """
         distances_by_cat = defaultdict(list)
 
         for node in tqdm(self.get_nodes_from_category_id(source_cat_id)):
@@ -443,11 +487,13 @@ class Graph(object):
 
         medians = dict()
 
+        # compute distances median for each category
         for target_cat_id, dist_list in distances_by_cat.items():
             medians[target_cat_id] = np.median(dist_list)
 
         del medians[source_cat_id]  # remove source category
 
+        # sort category by distance
         sorted_cat = sorted(zip(self.categories_list(), medians.values()),
                             key=lambda x: x[1])
         return [x[0] for x in sorted_cat]
@@ -503,15 +549,23 @@ class Graph(object):
                   damping factor
         :return: list of floats
         """
+        # since this function will be called on a graph of categories the
+        # indices are exactly the set [0, ..., n_categories], if we were to
+        # run this on any graph then we'd have to first map node ids to the
+        # set [0, ..., |V(G)|-1], otherwise we'd create an unnecessarily
+        # large matrix with the following lines
         n = self.max_node_id() + 1
         M = self.get_adjacency_matrix(normalize=True)
+        # random initialization
         v = np.random.rand(n, 1)
         v = v / np.linalg.norm(v, 1)
+        # modify adj matrix taking into account the damping factor
         M_hat = (d * M + (1 - d) / n)
-
+        # each iteration correspond to performing a random walk on M
         for i in range(n_iter):
             v = M_hat @ v
-
+        # at this point v[i] represents the probability of being at page i
+        # after n_iter random walks
         return v
 
     def sort_category_by_pagerank(self):
@@ -525,15 +579,3 @@ class Graph(object):
         sorted_categories = sorted(zip(categories, pr), key=lambda x: x[1], reverse=True)
         return [x[0] for x in sorted_categories]
 
-    def random_targets(self, cat_id, size):
-        nodes = self.get_nodes_from_category_id(cat_id)
-        ids = np.random.randint(0, len(nodes), size)
-        return list(np.array(nodes)[ids])
-
-
-# ---------------- RQ 6 ---------------- #
-
-def sorted_by_pagerank(graph, category_list):
-    pr = graph.pagerank()
-    sort = sorted(zip(category_list, pr), key=lambda x: x[1], reverse=True)
-    return [x[0] for x in sort]
