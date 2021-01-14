@@ -4,7 +4,6 @@ import seaborn as sns
 import numpy as np
 from tqdm import tqdm
 from contextlib import suppress
-from scipy import sparse
 
 sns.set_style("darkgrid")
 graph_filename = "wikigraph_reduced.csv"
@@ -12,6 +11,12 @@ categories_filename = "reduced_categories.txt"
 
 
 def intersection(list_a, list_b):
+    """ Returns the intersection of the two lists
+
+    :param list_a: list
+    :param list_b: list
+    :return: list
+    """
     return list(set(list_a).intersection(list_b))
 
 
@@ -141,8 +146,13 @@ class Graph(object):
             self.node_list.remove(node)
 
     def delete_edge(self, edge):
+        """ Deletes edge from the graph
+
+        :param edge: (int, int)
+        :return: None
+        """
         if edge not in self.edge_list:
-            print("Specified edge not in the graph.")
+            print("[Error] Specified edge not in the graph.")
             return None
 
         with suppress(KeyError, ValueError):
@@ -164,30 +174,33 @@ class Graph(object):
 
     def is_directed(self):
         """ Returns True if G is directed, False otherwise """
+        # saves the result of this function to make future calls fast
         if self.directed_bool is not None:
             return self.directed_bool
-
+        # reverse edges (u,v) becomes (v,u)
         reverse_edge_list = [(e[1], e[0]) for e in self.edge_list]
-        edge_intersection = set.intersection(set(self.edge_list), set(reverse_edge_list))
-        self.directed_bool = len(edge_intersection) != len(self.edge_list)
-        return self.directed_bool
+        edge_intersection = intersection(self.edge_list, reverse_edge_list)
+        # this two list will be equal iff (u,v) in E => (v,u) in E
+        return len(edge_intersection) != len(self.edge_list)
 
     def neighbours(self, node):
+        """ Returns the list of neighbours of node
+            v is a neighbour of v if (u,v) in E """
         return self.out_edge_dict[node]
 
-    def neighbours_by_category(self, node, cat_id):
-        """ Returns the list of neighbours of category cat_id """
-        node_list = self.out_edge_dict[node]
-        cat_nodes = self.get_nodes_from_category_id(cat_id)
-        intersection = set.intersection(set(node_list), set(cat_nodes))
-        return list(intersection)
+    # def neighbours_by_category(self, node, cat_id):
+    #     """ Returns the list of neighbours of category cat_id """
+    #     node_list = self.out_edge_dict[node]
+    #     cat_nodes = self.get_nodes_from_category_id(cat_id)
+    #     return intersection(node_list, cat_nodes)
 
-    def neighbour_sizes(self):
+    def get_neighbourhoods_size(self):
+        """ Returns the list of out-degree of each node """
         return list(map(len, list(self.out_edge_dict.values())))
 
     def avg_num_links(self):
-        """ Returns the average number of links per node """
-        neighbour_size_list = self.neighbour_sizes()
+        """ Returns the average number of out-links per node """
+        neighbour_size_list = self.get_neighbourhoods_size()
         return sum(neighbour_size_list) / self.node_count()
 
     def density(self):
@@ -220,33 +233,15 @@ class Graph(object):
 
         return central_node
 
-    def categories_list(self, as_string=True):
+    def categories_list(self):
         return list(self.category_dict.keys())
-
-    def induced_subgraph(self, cat_id_1, cat_id_2):
-        node_list_1 = self.get_nodes_from_category_id(cat_id_1)
-        node_list_2 = self.get_nodes_from_category_id(cat_id_2)
-        nodes = list(set.union(set(node_list_2), set(node_list_1)))
-
-        edge_list = []
-
-        for u in nodes:
-            for v in intersection(nodes, self.out_edge_dict[u]):
-                edge_list.append([u, v])
-            for v in intersection(nodes, self.in_edge_dict[u]):
-                edge_list.append([v, u])
-
-        graph = Graph()
-        graph.create_from_edgelist(edge_list)
-        return graph
-
-    # ----------- TASK SPECIFIC ----------- #
 
     def get_category_id(self, category):
         """ Returns the id of category """
         try:
             return self.category_dict[category]
         except KeyError:
+            print("[Error] Category not found.")
             return None
 
     def get_node_category(self, node):
@@ -262,6 +257,48 @@ class Graph(object):
             return self.nodes_by_category[category_id]
         except KeyError:
             return None
+
+    # ---------------- RQ 1 ---------------- #
+
+    def plot_degree_distribution(self):
+        neighbour_size_list = self.get_neighbourhoods_size()
+        counter = Counter()
+        counter.update(neighbour_size_list)
+        degrees = list(counter.keys())
+        freq = list(counter.values())
+
+        splot = sns.scatterplot(x=degrees, y=freq)
+        _ = splot.set(title="Log-log scale Degree Distribution",
+                      xscale="log", yscale="log",
+                      xlabel="Node Out-Degree", ylabel="Number of Nodes")
+
+    # ---------------- RQ 2 ---------------- #
+
+    def truncated_bfs(self, root, dist):
+        """ Returns the set of nodes at distance at most dist from root
+
+        :param root: int
+        :param dist: int
+        :return:
+        """
+        visited = defaultdict(bool)  # boolean vector of visits
+        frontier = defaultdict(list)  # {i: list of nodes at dist i from root}
+        frontier[0].append(root)
+
+        for i in range(0, dist):
+            if len(frontier[i]) == 0:
+                break
+            # explore each of the node at dist i
+            for u in frontier[i]:
+                # visit neighbours and append unvisited nodes to next level
+                for v in self.neighbours(u):
+                    if not visited[v]:
+                        visited[v] = True
+                        frontier[i + 1].append(v)
+
+        return list(visited.keys())
+
+    # ---------------- RQ 3 ---------------- #
 
     def category_distance(self, cat_id, targets_ids, max_dist=50):
         """ Return the minimum distance from the central node in
@@ -293,27 +330,6 @@ class Graph(object):
         else:
             return i
 
-    # ---------------- RQ 2 ---------------- #
-
-    def truncated_bfs(self, root, dist):
-        """ Returns the set of nodes at distance at most dist from root """
-        visited = defaultdict(bool)  # boolean vector of visits
-        frontier = defaultdict(list)
-        frontier[0].append(root)
-
-        for i in range(0, dist):
-            if len(frontier[i]) == 0:
-                break
-            for u in frontier[i]:
-                for v in self.neighbours(u):
-                    if not visited[v]:
-                        visited[v] = True
-                        frontier[i + 1].append(v)
-
-        return list(visited.keys())
-
-    # ---------------- RQ 3 ---------------- #
-
     def reachable_targets(self, root, targets, dist):
         reached = self.truncated_bfs(root, dist)
         diff = set(targets).difference(set(reached))
@@ -323,6 +339,29 @@ class Graph(object):
             return False
 
     # ---------------- RQ 4 ---------------- #
+
+    def induced_subgraph(self, cat_id_1, cat_id_2):
+        """
+
+        :param cat_id_1:
+        :param cat_id_2:
+        :return:
+        """
+        node_list_1 = self.get_nodes_from_category_id(cat_id_1)
+        node_list_2 = self.get_nodes_from_category_id(cat_id_2)
+        nodes = list(set.union(set(node_list_2), set(node_list_1)))
+
+        edge_list = []
+
+        for u in nodes:
+            for v in intersection(nodes, self.out_edge_dict[u]):
+                edge_list.append([u, v])
+            for v in intersection(nodes, self.in_edge_dict[u]):
+                edge_list.append([v, u])
+
+        graph = Graph()
+        graph.create_from_edgelist(edge_list)
+        return graph
 
     def modified_dfs(self, node, target, visited_edges):
         """
@@ -485,20 +524,6 @@ class Graph(object):
         categories = self.categories_list()
         sorted_categories = sorted(zip(categories, pr), key=lambda x: x[1], reverse=True)
         return [x[0] for x in sorted_categories]
-
-    # ---------------- RQ 1 ---------------- #
-
-    def plot_degree_distribution(self):
-        neighbour_size_list = self.neighbour_sizes()
-        counter = Counter()
-        counter.update(neighbour_size_list)
-        degrees = list(counter.keys())
-        freq = list(counter.values())
-
-        splot = sns.scatterplot(x=degrees, y=freq)
-        _ = splot.set(title="Log-log scale Degree Distribution",
-                      xscale="log", yscale="log",
-                      xlabel="Node Degree", ylabel="Number of Nodes")
 
     def random_targets(self, cat_id, size):
         nodes = self.get_nodes_from_category_id(cat_id)
