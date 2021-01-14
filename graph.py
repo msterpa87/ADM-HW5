@@ -188,12 +188,6 @@ class Graph(object):
             v is a neighbour of v if (u,v) in E """
         return self.out_edge_dict[node]
 
-    # def neighbours_by_category(self, node, cat_id):
-    #     """ Returns the list of neighbours of category cat_id """
-    #     node_list = self.out_edge_dict[node]
-    #     cat_nodes = self.get_nodes_from_category_id(cat_id)
-    #     return intersection(node_list, cat_nodes)
-
     def get_neighbourhoods_size(self):
         """ Returns the list of out-degree of each node """
         return list(map(len, list(self.out_edge_dict.values())))
@@ -308,6 +302,7 @@ class Graph(object):
         :param targets_ids: list of ints
         :param max_dist: int
         :return: int
+                 -1 if the targets could not be reached, int otherwise
         """
         central_node = self.central_node(cat_id)  # starting node
         frontier = defaultdict(list)
@@ -332,11 +327,6 @@ class Graph(object):
             i += 1
 
         return [i-1, -1][len(targets_ids) > 0]
-
-    # def reachable_targets(self, root, targets, dist):
-    #     reached = self.truncated_bfs(root, dist)
-    #     diff = set(targets).difference(set(reached))
-    #     return len(diff) == 0
 
     # This function is primarily for testing purposes
     def random_targets(self, cat_id, size):
